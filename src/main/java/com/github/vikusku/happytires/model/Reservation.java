@@ -6,9 +6,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import javax.persistence.*;
+import java.util.List;
 
 @Builder
 @Getter
@@ -19,7 +18,14 @@ import javax.persistence.Table;
 @Table
 public class Reservation {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", updatable = false, nullable = false)
     private long id;
+    @Enumerated(EnumType.STRING)
     private ServiceType serviceType;
-    private User user;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "customerId", referencedColumnName = "id")
+    private Customer customer;
+    @OneToMany(mappedBy = "reservation", fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.DETACH})
+    private List<TimeSlot> timeSlots;
 }
