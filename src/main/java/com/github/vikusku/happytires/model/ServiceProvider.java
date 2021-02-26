@@ -25,6 +25,6 @@ public class ServiceProvider {
     @Column(unique = true, nullable = false)
     private String email;
     private String phoneNumber;
-    @OneToMany(mappedBy = "serviceProvider", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.REMOVE})
+    @OneToMany(mappedBy = "serviceProvider", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.REMOVE, CascadeType.DETACH})
     private List<TimeSlot> timeSlots;
 }
