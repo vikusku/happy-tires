@@ -1,19 +1,16 @@
 package com.github.vikusku.happytires.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
+import com.google.common.base.Objects;
+import lombok.*;
 
 import javax.persistence.*;
 import java.util.List;
 
 @Builder
-@Getter
-@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Getter
+@Setter
 @Entity
 @Table
 public class Reservation {
@@ -28,4 +25,26 @@ public class Reservation {
     private Customer customer;
     @OneToMany(mappedBy = "reservation", fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.DETACH})
     private List<TimeSlot> timeSlots;
+
+    @Override
+    public String toString() {
+        return "Reservation [id=" + id +
+                ", serviceType=" + serviceType +
+                ", customer=" + customer.toString() + "]";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Reservation that = (Reservation) o;
+        return id == that.id &&
+                serviceType == that.serviceType &&
+                Objects.equal(customer, that.customer);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, serviceType, customer);
+    }
 }
