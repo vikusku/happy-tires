@@ -34,6 +34,7 @@ public class ServiceProviderController {
         return ResponseEntity.ok(serviceProviderService.getAll());
     }
 
+    // TODO use ServiceProviderNotFound exception
     @GetMapping("/{id}")
     public ResponseEntity<ServiceProviderDto> get(@PathVariable long id) {
         return serviceProviderService.get(id)
@@ -41,6 +42,7 @@ public class ServiceProviderController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // TODO use ServiceProviderNotFound exception
     @PostMapping(consumes = "application/json", produces = "application/json")
     public ResponseEntity<ServiceProviderDto> create(@Valid @NotNull @RequestBody ServiceProviderDto serviceProviderDto) throws URISyntaxException {
         return serviceProviderService.create(serviceProviderDto).map(spDto -> {
@@ -53,22 +55,11 @@ public class ServiceProviderController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // TODO use ServiceProviderNotFound exception
     @PutMapping(path = "/{id}", consumes = "application/json", produces = "application/json")
     public ResponseEntity<ServiceProviderDto> update(@PathVariable long id, @Valid @NotNull @RequestBody ServiceProviderDto serviceProviderDto) {
         return serviceProviderService.updateContactInfo(id, serviceProviderDto)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    @ExceptionHandler({MethodArgumentNotValidException.class})
-    public Map<String, String> handleValidationExceptions(MethodArgumentNotValidException ex) {
-        Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
-        });
-        return errors;
     }
 }
