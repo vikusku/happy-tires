@@ -5,7 +5,7 @@ import com.github.vikusku.happytires.dto.request.ScheduleTimeSlotRequest;
 import com.github.vikusku.happytires.dto.TimeSlotStatus;
 import com.github.vikusku.happytires.dto.response.TimeSlotAvailabilityResponse;
 import com.github.vikusku.happytires.exception.ServiceProviderNotFoundException;
-import com.github.vikusku.happytires.exception.advice.InvalidUpdateDayAvailabilityRequest;
+import com.github.vikusku.happytires.exception.InvalidDayAvailabilityException;
 import com.github.vikusku.happytires.model.ServiceProvider;
 import com.github.vikusku.happytires.model.TimeSlot;
 import com.github.vikusku.happytires.model.TimeSlotPK;
@@ -124,7 +124,7 @@ public class ScheduleService {
                 if (cTs.getReservation() == null) {
                     merged.remove(cTs);
                 } else {
-                    throw new InvalidUpdateDayAvailabilityRequest("Removing time slots with reservation is not allowed");
+                    throw new InvalidDayAvailabilityException("Removing time slots with reservation is not allowed");
                 }
             }
         });

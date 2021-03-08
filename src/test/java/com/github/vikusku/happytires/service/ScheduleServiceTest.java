@@ -3,7 +3,7 @@ package com.github.vikusku.happytires.service;
 import com.github.vikusku.happytires.dto.request.ScheduleTimeSlotRequest;
 import com.github.vikusku.happytires.dto.TimeSlotStatus;
 import com.github.vikusku.happytires.exception.ServiceProviderNotFoundException;
-import com.github.vikusku.happytires.exception.advice.InvalidUpdateDayAvailabilityRequest;
+import com.github.vikusku.happytires.exception.InvalidDayAvailabilityException;
 import com.github.vikusku.happytires.model.Reservation;
 import com.github.vikusku.happytires.model.ServiceProvider;
 import com.github.vikusku.happytires.model.TimeSlot;
@@ -280,7 +280,7 @@ class ScheduleServiceTest {
 
         when(spRepository.findById(serviceProviderId)).thenReturn(Optional.of(sp));
 
-        Exception exception = assertThrows(InvalidUpdateDayAvailabilityRequest.class, () -> {
+        Exception exception = assertThrows(InvalidDayAvailabilityException.class, () -> {
             scheduleService.updateTimeSlotsForServiceProvider(serviceProviderId, schedule);
         });
 
