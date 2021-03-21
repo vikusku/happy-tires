@@ -1,15 +1,15 @@
 package com.github.vikusku.happytires.dto.response;
 
-import lombok.Getter;
-import lombok.Setter;
+import com.github.vikusku.happytires.dto.ReservationDto;
+import lombok.Data;
 
 import java.time.LocalTime;
 
-@Getter
-@Setter
+@Data
 public class TimeSlotAvailabilityResponse {
     private LocalTime start;
     private Status status;
+    private ReservationDto reservationDto;
 
     public enum Status {
         UNAVAILABLE,

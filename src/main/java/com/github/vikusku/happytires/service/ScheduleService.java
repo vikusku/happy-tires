@@ -1,11 +1,10 @@
 package com.github.vikusku.happytires.service;
 
 import com.github.vikusku.happytires.dto.ReservationDto;
-import com.github.vikusku.happytires.dto.request.ScheduleTimeSlotRequest;
-import com.github.vikusku.happytires.dto.TimeSlotStatus;
+import com.github.vikusku.happytires.dto.AvailabilityIntervalDto;
 import com.github.vikusku.happytires.dto.response.TimeSlotAvailabilityResponse;
 import com.github.vikusku.happytires.exception.ServiceProviderNotFoundException;
-import com.github.vikusku.happytires.exception.InvalidDayAvailabilityException;
+import com.github.vikusku.happytires.exception.InvalidScheduleException;
 import com.github.vikusku.happytires.model.ServiceProvider;
 import com.github.vikusku.happytires.model.TimeSlot;
 import com.github.vikusku.happytires.model.TimeSlotPK;
@@ -45,27 +44,29 @@ public class ScheduleService {
          return Lists.newArrayList();
     }
 
-    public Map<LocalDate, TimeSlotAvailabilityResponse> findTimeSlotsForServiceProvider(
+    public Map<LocalDate, TimeSlotAvailabilityResponse> getScheduleForServiceProvider(
             final long serviceProviderId,
             final LocalDateTime from,
             final LocalDateTime until
     ) {
-        return  spRepository.findById(serviceProviderId).map(sp -> {
+        return  spRepository.findById(serviceProviderId)
+                .map(sp -> {
             Map<LocalDate, TimeSlotAvailabilityResponse> r = new HashMap<>();
             return r;
         }).orElseThrow(
                 () -> new ServiceProviderNotFoundException(String.format("Service provider with %d does not exist", serviceProviderId)));
     }
 
-    public void addTimeSlotsForServiceProvider(final long serviceProviderId,
-                                               final LinkedHashMap<LocalDate, List<ScheduleTimeSlotRequest>> schedule) {
+    public void createScheduleForServiceProvider(final long serviceProviderId,
+                                                 final LinkedHashMap<LocalDate, List<AvailabilityIntervalDto>> schedule) {
         final Optional<ServiceProvider> spOpt = spRepository.findById(serviceProviderId);
         if (spOpt.isPresent()) {
             final ServiceProvider sp = spOpt.get();
 
             List<TimeSlot> timeSlots = schedule.entrySet().stream()
-                    .map(dayAvailability -> createTimeSlotsForDay(dayAvailability.getKey(), dayAvailability.getValue(), sp))
-                    .flatMap(List::stream).collect(Collectors.toList());
+                    .map(dayAvailability -> createAvailableTimeSlotsForDay(dayAvailability.getKey(), dayAvailability.getValue(), sp))
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
 
             sp.setTimeSlots(timeSlots);
             spRepository.save(sp);
@@ -76,17 +77,18 @@ public class ScheduleService {
         }
     }
 
-    public void updateTimeSlotsForServiceProvider(final long serviceProviderId,
-                                                  final LinkedHashMap<LocalDate, List<ScheduleTimeSlotRequest>> schedule) {
+    public void updateScheduleForServiceProvider(final long serviceProviderId,
+                                                 final LinkedHashMap<LocalDate, List<AvailabilityIntervalDto>> schedule) {
         final Optional<ServiceProvider> spOpt = spRepository.findById(serviceProviderId);
         if (spOpt.isPresent()) {
             final ServiceProvider sp = spOpt.get();
 
-            List<TimeSlot> updatedTimeSlots = schedule.entrySet().stream()
-                    .map(dayAvailability -> createTimeSlotsForDay(dayAvailability.getKey(), dayAvailability.getValue(), sp))
-                    .flatMap(List::stream).collect(Collectors.toList());
+            List<TimeSlot> updatedAvailableTimeSlots = schedule.entrySet().stream()
+                    .map(dayAvailability -> createAvailableTimeSlotsForDay(dayAvailability.getKey(), dayAvailability.getValue(), sp))
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
 
-            List<TimeSlot> merged = merge(updatedTimeSlots, sp.getTimeSlots());
+            List<TimeSlot> merged = merge(updatedAvailableTimeSlots, sp.getTimeSlots());
 
             sp.setTimeSlots(merged);
             spRepository.save(sp);
@@ -97,39 +99,55 @@ public class ScheduleService {
         }
     }
 
-    private List<TimeSlot> createTimeSlotsForDay(
+    private List<TimeSlot> createAvailableTimeSlotsForDay(
             final LocalDate date,
-            final List<ScheduleTimeSlotRequest> daySchedule,
+            final List<AvailabilityIntervalDto> daySchedule,
             final ServiceProvider sp) {
 
         return daySchedule.stream()
-                .filter(timeSlot -> TimeSlotStatus.AVAILABLE.equals(timeSlot.getStatus()))
-                .map(timeSlot -> {
-                    final TimeSlot persistableTs = new TimeSlot();
-                    persistableTs.setStart(LocalDateTime.of(date, timeSlot.getStart()));
-                    persistableTs.setServiceProvider(sp);
-                    persistableTs.setDuration(DEFAULT_TIME_SLOT_DURATION);
+                .map(interval -> {
+                    final List<TimeSlot> timeSlots = Lists.newArrayList();
 
-                    return persistableTs;
-        }).collect(Collectors.toList());
+                    LocalDateTime slotStart = LocalDateTime.of(date, interval.getStart());
+                    final LocalDateTime intervalEnd = calculateIntervalEnd(slotStart, interval.getDurationMin());
+
+                    for ( ; slotStart.isBefore(intervalEnd); slotStart = slotStart.plusMinutes(DEFAULT_TIME_SLOT_DURATION.toMinutes())) {
+                        final TimeSlot persistableTs = new TimeSlot();
+                        persistableTs.setStart(slotStart);
+                        persistableTs.setServiceProvider(sp);
+                        persistableTs.setDuration(DEFAULT_TIME_SLOT_DURATION);
+
+                        timeSlots.add(persistableTs);
+                    }
+
+                    return timeSlots;
+                })
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
     }
 
-    private List<TimeSlot> merge(List<TimeSlot> updatedTimeSlots, List<TimeSlot> currentTimeSlots) {
+    private LocalDateTime calculateIntervalEnd(final LocalDateTime slotStart, final Duration intervalDuration) {
+        return slotStart.plusMinutes(DEFAULT_TIME_SLOT_DURATION.toMinutes() * intervalDuration.toMinutes() / DEFAULT_TIME_SLOT_DURATION.toMinutes());
+    }
+
+    private List<TimeSlot> merge(List<TimeSlot> updatedAvailableTimeSlots, List<TimeSlot> currentTimeSlots) {
         final List<TimeSlot> merged = new ArrayList<>(currentTimeSlots);
 
         currentTimeSlots.forEach(cTs -> {
-            if (updatedTimeSlots.contains(cTs)) {
-                updatedTimeSlots.remove(cTs);
-            } else {
-                if (cTs.getReservation() == null) {
-                    merged.remove(cTs);
+            if (cTs.getReservation() == null) {
+                if (updatedAvailableTimeSlots.contains(cTs)) {
+                    updatedAvailableTimeSlots.remove(cTs);
                 } else {
-                    throw new InvalidDayAvailabilityException("Removing time slots with reservation is not allowed");
+                    merged.remove(cTs);
+                }
+            } else {
+                if (updatedAvailableTimeSlots.contains(cTs)) {
+                    throw new InvalidScheduleException("Updating time slots with reservation is not allowed");
                 }
             }
         });
 
-        merged.addAll(updatedTimeSlots);
+        merged.addAll(updatedAvailableTimeSlots);
 
         return merged;
     }

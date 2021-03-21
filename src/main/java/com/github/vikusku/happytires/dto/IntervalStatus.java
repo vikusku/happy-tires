@@ -1,6 +1,6 @@
 package com.github.vikusku.happytires.dto;
 
-public enum TimeSlotStatus {
+public enum IntervalStatus {
     UNAVAILABLE,
     AVAILABLE,
     RESERVED

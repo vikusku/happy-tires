@@ -1,8 +1,9 @@
 package com.github.vikusku.happytires.controller;
 
-import com.github.vikusku.happytires.dto.request.ScheduleTimeSlotRequest;
+import com.github.vikusku.happytires.dto.AvailabilityIntervalDto;
 import com.github.vikusku.happytires.dto.response.TimeSlotAvailabilityResponse;
 import com.github.vikusku.happytires.service.ScheduleService;
+import com.google.common.collect.Lists;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 
 @RestController
-@RequestMapping(path = "/api/v1/timeslots")
+@RequestMapping(path = "/api/v1/schedules")
 public class ScheduleController {
 
     @Autowired
@@ -40,21 +41,38 @@ public class ScheduleController {
         return ResponseEntity.ok(scheduleService.findAllAvailableTimeSlots(start, end));
     }
 
+    @GetMapping(path = "{/serviceProviderId}")
+    public ResponseEntity<List<String>> getScheduleForServiceProvider(
+            @PathVariable long serviceProviderId,
+            @Valid
+            @FutureOrPresent
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    LocalDateTime from,
+            @Valid
+            @FutureOrPresent
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    LocalDateTime until) {
+
+        return ResponseEntity.ok(Lists.newArrayList());
+    }
+
     @PostMapping(path = "{/serviceProviderId}")
     public ResponseEntity<Void> createScheduleForServiceProvider(
         @PathVariable long serviceProviderId,
-        @Valid @NotNull @Size(min = 1) @RequestBody LinkedHashMap<LocalDate, List<ScheduleTimeSlotRequest>> schedule) {
+        @Valid @NotNull @Size(min = 1) @RequestBody LinkedHashMap<LocalDate, List<AvailabilityIntervalDto>> schedule) {
 
-        scheduleService.addTimeSlotsForServiceProvider(serviceProviderId, schedule);
-        return ResponseEntity.ok().build();
+        scheduleService.createScheduleForServiceProvider(serviceProviderId, schedule);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping(path = "{/serviceProviderId}")
     public ResponseEntity<Void> updateScheduleForServiceProvider(
             @PathVariable long serviceProviderId,
-            @Valid @NotNull @Size(min = 1) @RequestBody LinkedHashMap<LocalDate, List<ScheduleTimeSlotRequest>> schedule) {
+            @Valid @NotNull @Size(min = 1) @RequestBody LinkedHashMap<LocalDate, List<AvailabilityIntervalDto>> schedule) {
 
-        scheduleService.updateTimeSlotsForServiceProvider(serviceProviderId, schedule);
-        return ResponseEntity.ok().build();
+        scheduleService.updateScheduleForServiceProvider(serviceProviderId, schedule);
+        return ResponseEntity.noContent().build();
     }
 }
