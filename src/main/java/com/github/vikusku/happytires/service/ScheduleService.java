@@ -1,18 +1,18 @@
 package com.github.vikusku.happytires.service;
 
-import com.github.vikusku.happytires.dto.ReservationDto;
 import com.github.vikusku.happytires.dto.AvailabilityIntervalDto;
-import com.github.vikusku.happytires.dto.response.TimeSlotAvailabilityResponse;
-import com.github.vikusku.happytires.exception.ServiceProviderNotFoundException;
+import com.github.vikusku.happytires.dto.IntervalStatus;
+import com.github.vikusku.happytires.dto.ReservationDto;
+import com.github.vikusku.happytires.dto.ScheduleIntervalDto;
 import com.github.vikusku.happytires.exception.InvalidScheduleException;
+import com.github.vikusku.happytires.exception.ServiceProviderNotFoundException;
 import com.github.vikusku.happytires.model.ServiceProvider;
 import com.github.vikusku.happytires.model.TimeSlot;
-import com.github.vikusku.happytires.model.TimeSlotPK;
 import com.github.vikusku.happytires.repository.ServiceProviderRepository;
 import com.github.vikusku.happytires.repository.TimeSlotRepository;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import lombok.AllArgsConstructor;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +24,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static java.time.temporal.ChronoUnit.MINUTES;
+import static java.util.stream.Collectors.groupingBy;
+
+// TODO Create parent interface for Reservation and Interval
 @AllArgsConstructor
 @Service
 public class ScheduleService {
@@ -34,27 +38,146 @@ public class ScheduleService {
     @Autowired
     private ServiceProviderRepository spRepository;
 
-    @Autowired
-    private ModelMapper modelMapper;
-
     private final static Duration DEFAULT_TIME_SLOT_DURATION = Duration.ofMinutes(15);
+    private final static Duration FULL_DAY = Duration.ofMinutes(13 * 60);
+    private final static LocalTime START_OF_DAY = LocalTime.parse("08:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);
+    private final static LocalTime END_OF_DAY = LocalTime.parse("21:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);
 
-    public List<TimeSlotAvailabilityResponse> findAllAvailableTimeSlots(final LocalDateTime start, final LocalDateTime end) {
-//        return modelMapperUtil.mapList(timeSlotRepository.findAvailableTimeSlots(start), TimeSlotDto.class);
-         return Lists.newArrayList();
-    }
-
-    public Map<LocalDate, TimeSlotAvailabilityResponse> getScheduleForServiceProvider(
+    public Map<LocalDate, List<ScheduleIntervalDto>> getScheduleForServiceProvider(
             final long serviceProviderId,
-            final LocalDateTime from,
-            final LocalDateTime until
-    ) {
+            final LocalDate from,
+            final LocalDate until) {
         return  spRepository.findById(serviceProviderId)
                 .map(sp -> {
-            Map<LocalDate, TimeSlotAvailabilityResponse> r = new HashMap<>();
-            return r;
-        }).orElseThrow(
-                () -> new ServiceProviderNotFoundException(String.format("Service provider with %d does not exist", serviceProviderId)));
+                    final List<TimeSlot> timeSlots = timeSlotRepository.findByServiceProviderAndStartAfterAndStartBefore(
+                            sp, LocalDateTime.of(from, LocalTime.MIN), LocalDateTime.of(until, LocalTime.MAX));
+
+                    Map<LocalDate, List<ScheduleIntervalDto>> intervalsFromTimeSlots = timeSlots.stream()
+                            .collect(groupingBy(ts -> ts.getStart().toLocalDate()))
+                            .entrySet()
+                            .stream()
+                            .collect(Collectors.toMap(
+                                    Map.Entry::getKey,
+                                    e ->  parseTimeSlots(e.getValue())
+                            ));
+
+                    return generateGrid(from, until, intervalsFromTimeSlots);
+                })
+                .orElseThrow(() -> new ServiceProviderNotFoundException(String.format("Service provider with %d does not exist", serviceProviderId)));
+    }
+    private Map<LocalDate, List<ScheduleIntervalDto>> generateGrid(LocalDate from, LocalDate until, Map<LocalDate,
+            List<ScheduleIntervalDto>> intervalsFromTimeSlots) {
+        Map<LocalDate, List<ScheduleIntervalDto>> schedule = Maps.newLinkedHashMap();
+
+        for (LocalDate date = from; date.isBefore(until); date = date.plusDays(1)) {
+            final List<ScheduleIntervalDto> daySchedule = Lists.newArrayList();
+
+            final List<ScheduleIntervalDto> dayIntervalsFromTimeSlots = intervalsFromTimeSlots.get(date);
+            if (dayIntervalsFromTimeSlots == null) {
+                daySchedule.add(new ScheduleIntervalDto(START_OF_DAY, FULL_DAY, null, IntervalStatus.UNAVAILABLE));
+            } else {
+                ScheduleIntervalDto previousInterval = dayIntervalsFromTimeSlots.get(0);
+                if (START_OF_DAY.isBefore(previousInterval.getStart())) {
+                    daySchedule.add(new ScheduleIntervalDto(START_OF_DAY,
+                            Duration.ofMinutes(START_OF_DAY.until(previousInterval.getStart(), MINUTES)), null, IntervalStatus.UNAVAILABLE));
+                }
+
+                for (int intervalIndex = 1; intervalIndex < dayIntervalsFromTimeSlots.size(); intervalIndex++) {
+
+                    daySchedule.add(previousInterval);
+
+                    final ScheduleIntervalDto currentInterval = dayIntervalsFromTimeSlots.get(intervalIndex);
+                    final LocalTime endOfPreviousInterval = previousInterval.getStart().plusMinutes(previousInterval.getDurationMin().toMinutes());
+
+                    if (endOfPreviousInterval.isBefore(currentInterval.getStart())) {
+                        daySchedule.add(new ScheduleIntervalDto(endOfPreviousInterval,
+                                Duration.ofMinutes(endOfPreviousInterval.until(currentInterval.getStart(), MINUTES)),
+                                null, IntervalStatus.UNAVAILABLE));
+                    }
+                    previousInterval = currentInterval;
+                }
+
+                daySchedule.add(previousInterval);
+                final LocalTime endOfLastInterval = previousInterval.getStart().plusMinutes(previousInterval.getDurationMin().toMinutes());
+
+                if (endOfLastInterval.isBefore(END_OF_DAY)) {
+                    daySchedule.add(new ScheduleIntervalDto(endOfLastInterval,
+                            Duration.ofMinutes(endOfLastInterval.until(END_OF_DAY, MINUTES)), null, IntervalStatus.UNAVAILABLE));
+                }
+            }
+
+            schedule.put(date, daySchedule);
+        }
+
+        return schedule;
+    }
+
+    private List<ScheduleIntervalDto> parseTimeSlots(List<TimeSlot> timeSlots) {
+        List<ScheduleIntervalDto> dayGrid = new ArrayList<>();
+
+
+        final TimeSlot firstSlot = timeSlots.get(0);
+        ScheduleIntervalDto interval = createInterval(firstSlot);
+
+        for (int slotIndex = 1; slotIndex < timeSlots.size(); slotIndex++) {
+            final TimeSlot timeSlot = timeSlots.get(slotIndex);
+
+            if (isSameInterval(timeSlot, interval)) {
+                interval.setDurationMin(interval.getDurationMin().plusMinutes(timeSlot.getDuration().toMinutes()));
+            } else {
+                dayGrid.add(interval);
+                interval = createInterval(timeSlot);
+            }
+        }
+
+        dayGrid.add(interval);
+        return dayGrid;
+    }
+
+    private boolean isSameInterval(final TimeSlot nextTimeSlot, final ScheduleIntervalDto currentInterval) {
+        final LocalTime endOfCurrentInterval = currentInterval.getStart().plusMinutes(currentInterval.getDurationMin().toMinutes());
+        if (endOfCurrentInterval.until(nextTimeSlot.getStart(), MINUTES) >= DEFAULT_TIME_SLOT_DURATION.toMinutes()) {
+            return false;
+        }
+
+        if (currentInterval.getStatus().equals(IntervalStatus.AVAILABLE)) {
+            return nextTimeSlot.getReservation() == null;
+        }
+
+        if (currentInterval.getStatus().equals(IntervalStatus.RESERVED)) {
+            if (nextTimeSlot.getReservation() == null) {
+                return false;
+            } else {
+                return currentInterval.getReservationDto().getId() == nextTimeSlot.getReservation().getId();
+            }
+        }
+
+        return false;
+    }
+
+    private ScheduleIntervalDto createInterval(final TimeSlot timeSlot) {
+        ScheduleIntervalDto interval = new ScheduleIntervalDto();
+        interval.setStart(timeSlot.getStart().toLocalTime());
+        interval.setDurationMin(timeSlot.getDuration());
+
+        if (timeSlot.getReservation() == null) {
+            interval.setStatus(IntervalStatus.AVAILABLE);
+        } else {
+            interval.setStatus(IntervalStatus.RESERVED);
+            // TODO improve this. User Model mapper.
+            interval.setReservationDto(new ReservationDto(
+                    timeSlot.getReservation().getId(),
+                    timeSlot.getReservation().getStart(),
+                    timeSlot.getReservation().getDuration(),
+                    timeSlot.getReservation().getServiceType(),
+                    timeSlot.getReservation().getCustomer().getName(),
+                    timeSlot.getReservation().getCustomer().getAddress(),
+                    timeSlot.getReservation().getCustomer().getEmail(),
+                    timeSlot.getReservation().getCustomer().getPhoneNumber()
+            ));
+        }
+
+        return interval;
     }
 
     public void createScheduleForServiceProvider(final long serviceProviderId,
@@ -146,40 +269,8 @@ public class ScheduleService {
                 }
             }
         });
-
         merged.addAll(updatedAvailableTimeSlots);
 
         return merged;
     }
-
-    private List<TimeSlotAvailabilityResponse> generatedGrid(LocalDate date, Long serviceProviderId) {
-            List<TimeSlotAvailabilityResponse> dayGrid = new ArrayList<>();
-            LocalTime slotStart = LocalTime.parse("08:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);
-            LocalTime endOfDay = LocalTime.parse("22:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);
-
-
-        for ( ;slotStart.isBefore(endOfDay); slotStart = slotStart.plusMinutes(DEFAULT_TIME_SLOT_DURATION.toMinutes())) {
-
-            final TimeSlotAvailabilityResponse timeSlotAvailability = new TimeSlotAvailabilityResponse();
-            timeSlotAvailability.setStart(slotStart);
-//            timeSlotAvailability.setDuration(DEFAULT_TIME_SLOT_DURATION);
-            timeSlotAvailability.setStatus(TimeSlotAvailabilityResponse.Status.UNAVAILABLE);
-
-            final Optional<TimeSlot> tsOpt = timeSlotRepository.findById(
-                    new TimeSlotPK(LocalDateTime.of(date, slotStart), serviceProviderId));
-
-            if (tsOpt.isPresent()) {
-                if (tsOpt.get().getReservation() != null) {
-                    timeSlotAvailability.setReservationDto(modelMapper.map(tsOpt.get().getReservation(), ReservationDto.class));
-                    timeSlotAvailability.setStatus(TimeSlotAvailabilityResponse.Status.RESERVED);
-                } else {
-                    timeSlotAvailability.setStatus(TimeSlotAvailabilityResponse.Status.AVAILABLE);
-                }
-            }
-
-            dayGrid.add(timeSlotAvailability);
-        }
-
-        return dayGrid;
-   }
 }
