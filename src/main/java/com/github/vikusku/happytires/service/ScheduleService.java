@@ -10,6 +10,7 @@ import com.github.vikusku.happytires.model.ServiceProvider;
 import com.github.vikusku.happytires.model.TimeSlot;
 import com.github.vikusku.happytires.repository.ServiceProviderRepository;
 import com.github.vikusku.happytires.repository.TimeSlotRepository;
+import com.github.vikusku.happytires.util.Constants;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import lombok.AllArgsConstructor;
@@ -24,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.github.vikusku.happytires.util.Constants.DEFAULT_TIME_SLOT_DURATION;
 import static java.time.temporal.ChronoUnit.MINUTES;
 import static java.util.stream.Collectors.groupingBy;
 
@@ -38,7 +40,6 @@ public class ScheduleService {
     @Autowired
     private ServiceProviderRepository spRepository;
 
-    private final static Duration DEFAULT_TIME_SLOT_DURATION = Duration.ofMinutes(15);
     private final static Duration FULL_DAY = Duration.ofMinutes(13 * 60);
     private final static LocalTime START_OF_DAY = LocalTime.parse("08:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);
     private final static LocalTime END_OF_DAY = LocalTime.parse("21:00:00+02:00", DateTimeFormatter.ISO_OFFSET_TIME);

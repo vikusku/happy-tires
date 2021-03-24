@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+// TODO add tests
 @RestController
 @RequestMapping(path = "/api/v1/schedules")
 public class ScheduleController {

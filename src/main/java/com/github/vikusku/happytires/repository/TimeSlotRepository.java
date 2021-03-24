@@ -14,4 +14,9 @@ public interface TimeSlotRepository extends JpaRepository<TimeSlot, TimeSlotPK> 
             final ServiceProvider serviceProvider,
             final LocalDateTime after,
             final LocalDateTime before);
+
+    List<TimeSlot> findByServiceProviderAndStartAfterAndStartBeforeAndReservationIsNull(
+            final ServiceProvider serviceProvider,
+            final LocalDateTime after,
+            final LocalDateTime before);
 }

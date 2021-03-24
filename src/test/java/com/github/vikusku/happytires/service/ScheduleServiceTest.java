@@ -43,9 +43,6 @@ class ScheduleServiceTest {
     @MockBean
     private ServiceProviderRepository spRepository;
 
-    @MockBean
-    private ModelMapper modelMapper;
-
     @Captor
     ArgumentCaptor<ServiceProvider> serviceProviderArgumentCaptor;
 
@@ -59,12 +56,12 @@ class ScheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        scheduleService = new ScheduleService(timeSlotRepository, spRepository,modelMapper);
+        scheduleService = new ScheduleService(timeSlotRepository, spRepository);
     }
 
     @AfterEach
     void tearDown() {
-        clearInvocations(timeSlotRepository, spRepository, modelMapper);
+        clearInvocations(timeSlotRepository, spRepository);
     }
 
     @Test
