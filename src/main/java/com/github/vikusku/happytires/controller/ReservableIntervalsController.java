@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping(path = "/reservable-intervals")
+@RequestMapping(path = "/api/v1/reservable-intervals")
 public class ReservableIntervalsController {
 
     @Autowired
